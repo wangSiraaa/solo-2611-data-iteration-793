@@ -1,0 +1,56 @@
+{
+  "charge": {
+    "trace_id": "C",
+    "revision": "r1",
+    "segments": [
+      {"segment_id": "c1", "start": 0, "end": 1, "power": 6},
+      {"segment_id": "c2", "start": 1, "end": 2, "power": 0},
+      {"segment_id": "c3", "start": 2, "end": 3, "power": 2},
+      {"segment_id": "c4", "start": 3, "end": 4, "power": 0}
+    ]
+  },
+  "discharge": {
+    "trace_id": "D",
+    "revision": "r1",
+    "segments": [
+      {"segment_id": "d1", "start": 0, "end": 1, "power": 0},
+      {"segment_id": "d2", "start": 1, "end": 2, "power": 4},
+      {"segment_id": "d3", "start": 2, "end": 3, "power": 0},
+      {"segment_id": "d4", "start": 3, "end": 4, "power": 4}
+    ]
+  },
+  "params": {
+    "initial_charge": 0,
+    "capacity": 6,
+    "charge_efficiency": 1,
+    "discharge_efficiency": 1
+  },
+  "revise": {
+    "trace": "charge",
+    "revision": "r2",
+    "segments": [
+      {"segment_id": "c1", "start": 0, "end": 1, "power": 6},
+      {"segment_id": "c2", "start": 1, "end": 2, "power": 0},
+      {"segment_id": "c3", "start": 2, "end": 3, "power": 0},
+      {"segment_id": "c4", "start": 3, "end": 4, "power": 0}
+    ]
+  },
+  "contracts": [
+    {
+      "contract_id": "W",
+      "revision": "w1",
+      "tiers": [
+        {"max_depth": 2, "full_cycle_cost": 1},
+        {"max_depth": 6, "full_cycle_cost": 3}
+      ]
+    },
+    {
+      "contract_id": "W",
+      "revision": "w2",
+      "tiers": [
+        {"max_depth": 2, "full_cycle_cost": 0},
+        {"max_depth": 6, "full_cycle_cost": 3}
+      ]
+    }
+  ]
+}

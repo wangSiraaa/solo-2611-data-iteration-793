@@ -47,6 +47,21 @@ from .errors import (
 from .interval import Segment, Trajectory, period_charge
 from .ledger import Ledger, bill_document
 from .power import PowerRevision, TrajectoryStore
+from .reports import (
+    build_soc_report,
+    build_warranty_report,
+    rebuild_soc_report,
+    register_trace_json,
+    switch_contract,
+)
+from .soc import (
+    Anchor,
+    SocParams,
+    compress_points,
+    simulate as simulate_soc,
+)
+from .store import PowerContext, ReportStore, segments_from_json
+from .warranty import Tier, WarrantyContract, decompose
 
 __all__ = [
     "Segment",
@@ -59,6 +74,22 @@ __all__ = [
     "evaluate",
     "period_charge",
     "bill_document",
+    # SOC / warranty layer
+    "ReportStore",
+    "PowerContext",
+    "SocParams",
+    "Anchor",
+    "Tier",
+    "WarrantyContract",
+    "simulate_soc",
+    "compress_points",
+    "decompose",
+    "segments_from_json",
+    "register_trace_json",
+    "build_soc_report",
+    "rebuild_soc_report",
+    "build_warranty_report",
+    "switch_contract",
     "SCHEMA",
     "COVERAGE_COMPLETE",
     "COVERAGE_PARTIAL",

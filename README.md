@@ -9,6 +9,7 @@ Two independent layers:
 |-------|--------|----------------|
 | power / demand | `power_billing/interval.py`, `demand.py`, `power.py` | exact interval products, revisioned trajectories, demand search, target-charge products |
 | billing ledger | `power_billing/ledger.py` | immutable posted bills, append-only entries, linear correction chain, current head |
+| storage / warranty | `power_billing/store.py`, `soc.py`, `warranty.py`, `reports.py` | exact state-of-charge curves and warranty-cycle accounting over a revisioned trace store |
 
 The layers are intentionally independent: a *target product* is a pure function
 of `(contract, power trajectory)`; the ledger never recomputes demand. A power
@@ -19,7 +20,9 @@ money.** Money moves only through an explicit `post_target`.
 
 ```bash
 python3 -m power_billing.cli materials/735          # replay the material ops
-python3 -m unittest discover -s tests -v            # 36 tests
+python3 -m power_billing.cli demo                   # SOC + warranty worked examples
+python3 -m power_billing.cli warranty --scenario materials/soc/worked.json
+python3 -m unittest discover -s tests -v            # 69 tests
 python3 materials/735/bill_reader.py bill.json      # read a demand-bill/v1 doc
 ```
 
@@ -143,7 +146,74 @@ it is simpler to prove correct and the workload is write-light. `busy_timeout`
 (default 15 s) makes a losing writer wait rather than fail spuriously; a genuine
 conflict (stale head) is reported as `ConflictError`.
 
-## Verified material scenario
+## Layer 4 — state-of-charge report (`soc-report/v1`)
+
+Bind one **charge** and one **discharge** non-negative power trace (each with its
+own revision), an initial charge, a capacity and two efficiencies in `(0, 1]`.
+Where both traces are known the net inventory slope is
+
+```
+dsoc/dt = eta_charge * p_charge - p_discharge / eta_discharge
+```
+
+Power is piecewise constant and every trace breakpoint is an event boundary, so
+each bracket integrates exactly. The actual charge curve is clamped to
+`[0, capacity]`:
+
+* charging past capacity → the excess is **overflow** (`eta_charge·p_charge·Δt`);
+* discharging past 0 → the deficit is **unserved** (`p_discharge/eta_discharge·Δt`).
+
+A later flow back inside the band continues from the *true* endpoint (0 or
+capacity), never the unclamped line. `boundary_events` records every in-bracket
+touch with its exact time and whether it *entered* the bound or was *already*
+there — the "段内到边界的时刻".
+
+Unknown data: a bracket is known only if **both** traces cover it. A maximal run
+of unknown brackets truncates the provable history (`gaps`, `truncated`). A new
+run starts only at an independent timed charge measurement (`anchors`) whose time
+coincides with the resumption of known power. Two sides of a gap are never
+stitched into one swing. The product also carries the interval list, the raw
+points and the **turning points** (equal plateaus and same-direction interior
+points removed) per run.
+
+## Layer 5 — warranty cycles (`warranty-report/v1`)
+
+A contract gives depth tiers with strictly increasing upper bounds that cover
+the capacity, plus the consumption of one complete cycle per tier. For each
+provable run:
+
+1. take the turning values, leftmost four at a time: `A,B,C,D`;
+2. if `|B−C| <= |A−B|` **and** `|B−C| <= |C−D|`, `B,C` is one complete cycle of
+   depth `|B−C|`; remove both and restart the search;
+3. otherwise skip by one and keep scanning;
+4. when nothing more can be removed, every adjacent pair of remaining endpoints
+   is one half cycle of depth `|difference|`.
+
+Usage of a complete cycle of depth `d` is `full_cycle_cost · d / tier.max_depth`
+for the tier whose `max_depth` first covers `d`; a half cycle consumes half.
+The decomposition depends only on the charge history, so **switching contracts
+changes only the costs** and reuses the same endpoints (`switch_contract`).
+
+Worked material (`materials/soc/worked.json`): cap 6, start 0, efficiency 1, net
+`+6,−4,+2,−4` → turning `0,6,2,4,0` → one depth-2 complete cycle and two depth-6
+halves. With tiers `(≤2 → 1, ≤6 → 3)` usage is `4`; making the shallow tier free
+gives `3`. If the third segment is actually 0 (`shortfall.json`) the turning
+points collapse to `0,6,0`, the last discharge leaves `2` unserved, and the
+original contract also costs only `3`.
+
+### Storage, revisions, scale
+
+`ReportStore` (SQLite, exact numerator/denominator text) holds revisioned traces
+and three append-only tables. Reports are **content-addressed**: the `report_id`
+is a digest of the exact product (including the bound trace revisions), so
+replaying the same inputs is idempotent and a later power revision can never
+overwrite a cited report — it yields a new id, while the old document still
+resolves. Per cabinet up to 5000 source
+segments: simulation is a single O(n log n) sweep over merged breakpoints, and
+cycle extraction is O(k²) in the compressed turning points `k` (bounded by `n`),
+comfortably within budget (see `test_scale_five_thousand_segments`).
+
+
 
 | step | result |
 |------|--------|
@@ -179,3 +249,19 @@ idempotent replay, conflicting id reuse, and reopening a file database.
 | two connections, one winner | `test_only_one_concurrent_correction_wins` |
 | reopen persisted database | `test_reopening_a_database_preserves_state` |
 | scale (1000 seg / 200 contracts / 500 bills) | `test_1000_segments_200_contracts_500_bills` |
+| SOC slope, clamping, exact bound time | `test_worked_example_turning_points`, `test_in_segment_saturation_exact_time_and_overflow`, `test_in_segment_depletion_and_unserved` |
+| overflow / unserved / losses exact | `test_in_segment_saturation_exact_time_and_overflow`, `test_efficiencies_and_losses` |
+| already-at-bound vs entering | `test_already_saturated_bracket`, `test_in_segment_depletion_and_unserved` |
+| reverse flow from true endpoint | `test_reverse_flow_continues_from_true_endpoint` |
+| missing route truncates; anchor restarts | `test_missing_route_truncates_history`, `test_anchor_restarts_a_new_run`, `test_no_anchor_no_restart` |
+| gap sides not joined into one cycle | `test_gap_sides_not_joined_into_one_cycle` |
+| plateau / same-direction removal | `test_compress_removes_plateaus_and_same_direction` |
+| 4-point complete-cycle rule, skip, restart | `test_worked_example_one_full_two_half`, `test_decompose_leftmost_four_only`, `test_skip_when_not_a_valley` |
+| usage 4 / free-shallow 3 / shortfall 3+2 | `test_worked_usage_four_and_free_shallow_three`, `test_third_segment_zero_usage_three_and_unserved_two` |
+| traceable endpoints | `test_traceable_endpoints_are_real_times` |
+| contract switch reuses same history | `test_contract_switch_does_not_mutate_first` |
+| revision → new report, old readable | `test_revision_yields_new_report_old_readable` |
+| content-addressed / idempotent | `test_content_addressed_report_id_is_stable` |
+| reopen report store | `test_reopening_file_store_preserves_reports` |
+| SOC/warranty scale (5000 seg) | `test_scale_five_thousand_segments` |
+| CLI demo end-to-end | `test_demo_runs_and_prints_expected_totals`, `test_soc_subcommand_on_scenario_file` |

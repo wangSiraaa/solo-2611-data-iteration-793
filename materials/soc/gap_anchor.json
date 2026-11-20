@@ -1,0 +1,36 @@
+{
+  "charge": {
+    "trace_id": "C",
+    "revision": "r1",
+    "segments": [
+      {"segment_id": "a", "start": 0, "end": 2, "power": 4},
+      {"segment_id": "b", "start": 4, "end": 6, "power": 3}
+    ]
+  },
+  "discharge": {
+    "trace_id": "D",
+    "revision": "r1",
+    "segments": [
+      {"segment_id": "z1", "start": 0, "end": 2, "power": 0},
+      {"segment_id": "z2", "start": 4, "end": 6, "power": 0}
+    ]
+  },
+  "params": {
+    "initial_charge": 0,
+    "capacity": 10,
+    "charge_efficiency": 1,
+    "discharge_efficiency": 1
+  },
+  "anchors": [
+    {"time": 4, "charge": 1}
+  ],
+  "contracts": [
+    {
+      "contract_id": "W",
+      "revision": "w1",
+      "tiers": [
+        {"max_depth": 10, "full_cycle_cost": 2}
+      ]
+    }
+  ]
+}
